@@ -1,0 +1,45 @@
+# Environnements Python
+.venv/
+.venv_scripts/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Variables d'environnement
+.env
+*.env
+
+# Python cache (global)
+**/__pycache__/
+**/*.py[cod]
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Docker
+postgres_data/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+
+# Claude / docs internes
+.claude/
+CLAUDE.md
+
+# Données personnelles
+*.sql
+*.dump
+*.csv
+*.json
+scripts/output/
