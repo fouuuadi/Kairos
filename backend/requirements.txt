@@ -9,6 +9,7 @@ pandas
 pandas-ta
 resend
 python-dotenv
+python-multipart
 pytest
 pytest-asyncio
 httpx
