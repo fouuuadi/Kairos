@@ -15,6 +15,8 @@ class Position(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     stop_loss_pct: Mapped[float] = mapped_column(Float, nullable=False, default=15.0)
     take_profit_pct: Mapped[float] = mapped_column(Float, nullable=False, default=30.0)
+    rsi_buy_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=30.0)
+    rsi_sell_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=70.0)
     email_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 

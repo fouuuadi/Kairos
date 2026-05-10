@@ -1,5 +1,9 @@
+import csv
+import io
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
@@ -39,6 +43,8 @@ async def create_position(data: PositionCreate, db: AsyncSession = Depends(get_d
         name=data.name,
         stop_loss_pct=data.stop_loss_pct,
         take_profit_pct=data.take_profit_pct,
+        rsi_buy_threshold=data.rsi_buy_threshold,
+        rsi_sell_threshold=data.rsi_sell_threshold,
         email_alerts=data.email_alerts,
     )
     db.add(position)
@@ -72,6 +78,10 @@ async def update_position(position_id: uuid.UUID, data: PositionUpdate, db: Asyn
         pos.stop_loss_pct = data.stop_loss_pct
     if data.take_profit_pct is not None:
         pos.take_profit_pct = data.take_profit_pct
+    if data.rsi_buy_threshold is not None:
+        pos.rsi_buy_threshold = data.rsi_buy_threshold
+    if data.rsi_sell_threshold is not None:
+        pos.rsi_sell_threshold = data.rsi_sell_threshold
     if data.email_alerts is not None:
         pos.email_alerts = data.email_alerts
     await db.commit()
@@ -112,6 +122,55 @@ async def delete_entry(position_id: uuid.UUID, entry_id: uuid.UUID, db: AsyncSes
 async def get_market_data(position_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     pos = await _get_position_or_404(position_id, db)
     return get_price_and_indicators(pos.ticker)
+
+
+@router.get("/{position_id}/export/csv")
+async def export_entries_csv(position_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    pos = await _get_position_or_404(position_id, db)
+    entries = sorted(pos.entries, key=lambda e: e.date)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["date", "quantity", "price", "invested"])
+    for e in entries:
+        writer.writerow([e.date.isoformat(), e.quantity, e.price, round(e.quantity * e.price, 6)])
+
+    output.seek(0)
+    filename = f"{pos.ticker}_entries.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{position_id}/import/csv", status_code=201)
+async def import_entries_csv(
+    position_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_position_or_404(position_id, db)
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
+
+    created = 0
+    errors = []
+    for i, row in enumerate(reader, start=2):
+        try:
+            entry = Entry(
+                position_id=position_id,
+                date=date.fromisoformat(row["date"].strip()),
+                quantity=float(row["quantity"]),
+                price=float(row["price"]),
+            )
+            db.add(entry)
+            created += 1
+        except (KeyError, ValueError) as exc:
+            errors.append(f"ligne {i} : {exc}")
+
+    await db.commit()
+    return {"created": created, "errors": errors}
 
 
 @router.get("/verify/{ticker}")

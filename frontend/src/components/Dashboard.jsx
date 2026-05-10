@@ -1,14 +1,20 @@
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, LayoutGrid, List } from "lucide-react";
 import { positionsApi } from "../api/client.js";
 import PositionCard from "./PositionCard.jsx";
 import NotificationBell from "./NotificationBell.jsx";
 import { calcAvgCost, fmt, fmtPct, cn } from "../lib/utils.js";
 
+const SIGNAL_ORDER = { SELL: 0, BUY: 1, HOLD: 2 };
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  const [sortBy, setSortBy] = useState("signal");
+  const [compact, setCompact] = useState(false);
 
   const { data: positions = [], isLoading } = useQuery({
     queryKey: ["positions"],
@@ -29,6 +35,31 @@ export default function Dashboard() {
   const totalPnl = totalValue - totalInvested;
   const totalPnlPct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
 
+  const sorted = useMemo(() => {
+    const list = [...positions];
+    if (sortBy === "signal") {
+      list.sort((a, b) => {
+        const sa = SIGNAL_ORDER[a.live?.signal ?? "HOLD"] ?? 2;
+        const sb = SIGNAL_ORDER[b.live?.signal ?? "HOLD"] ?? 2;
+        return sa - sb;
+      });
+    } else if (sortBy === "pnl") {
+      list.sort((a, b) => {
+        const pnlOf = (pos) => {
+          const price = pos.live?.price;
+          if (price == null) return -Infinity;
+          const qty = pos.entries.reduce((s, e) => s + e.quantity, 0);
+          const invested = pos.entries.reduce((s, e) => s + e.quantity * e.price, 0);
+          return price * qty - invested;
+        };
+        return pnlOf(b) - pnlOf(a);
+      });
+    } else if (sortBy === "ticker") {
+      list.sort((a, b) => a.ticker.localeCompare(b.ticker));
+    }
+    return list;
+  }, [positions, sortBy]);
+
   return (
     <div className="min-h-screen p-6 max-w-6xl mx-auto">
       <header className="flex items-center justify-between mb-8">
@@ -37,6 +68,22 @@ export default function Dashboard() {
           <p className="text-gray-400 text-sm">DCA Portfolio Tracker</p>
         </div>
         <div className="flex items-center gap-3">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 cursor-pointer"
+          >
+            <option value="signal">Trier : Signal</option>
+            <option value="pnl">Trier : P&L</option>
+            <option value="ticker">Trier : Ticker</option>
+          </select>
+          <button
+            onClick={() => setCompact((v) => !v)}
+            title={compact ? "Vue détaillée" : "Vue compacte"}
+            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-gray-400 hover:text-white"
+          >
+            {compact ? <LayoutGrid size={16} /> : <List size={16} />}
+          </button>
           <NotificationBell />
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["positions"] })}
@@ -89,8 +136,8 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {positions.map((pos) => (
-            <PositionCard key={pos.id} position={pos} />
+          {sorted.map((pos) => (
+            <PositionCard key={pos.id} position={pos} compact={compact} />
           ))}
         </div>
       )}

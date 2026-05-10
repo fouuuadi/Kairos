@@ -13,6 +13,8 @@ def compute_signal(
     rsi: float | None,
     above_ma50: bool | None,
     above_ma200: bool | None,
+    rsi_buy_threshold: float = 30.0,
+    rsi_sell_threshold: float = 70.0,
 ) -> dict:
     if avg_cost is not None:
         sl_price = avg_cost * (1 - stop_loss_pct / 100)
@@ -24,9 +26,9 @@ def compute_signal(
             return {"signal": "SELL", "reason": f"Objectif de gain atteint (+{take_profit_pct}%)"}
 
     if rsi is not None:
-        if rsi < 30:
+        if rsi < rsi_buy_threshold:
             return {"signal": "BUY", "reason": f"RSI en survente ({rsi:.1f})"}
-        if rsi > 70:
+        if rsi > rsi_sell_threshold:
             return {"signal": "SELL", "reason": f"RSI en surachat ({rsi:.1f})"}
 
     if above_ma50 and above_ma200:

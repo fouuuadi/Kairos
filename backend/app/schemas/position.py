@@ -25,6 +25,8 @@ class PositionCreate(BaseModel):
     name: str
     stop_loss_pct: float = 15.0
     take_profit_pct: float = 30.0
+    rsi_buy_threshold: float = 30.0
+    rsi_sell_threshold: float = 70.0
     email_alerts: bool = True
     entries: list[EntryCreate] = []
 
@@ -34,6 +36,8 @@ class PositionUpdate(BaseModel):
     name: str | None = None
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
+    rsi_buy_threshold: float | None = None
+    rsi_sell_threshold: float | None = None
     email_alerts: bool | None = None
 
 
@@ -43,6 +47,8 @@ class PositionOut(BaseModel):
     name: str
     stop_loss_pct: float
     take_profit_pct: float
+    rsi_buy_threshold: float
+    rsi_sell_threshold: float
     email_alerts: bool
     created_at: datetime
     entries: list[EntryOut] = []

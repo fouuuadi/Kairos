@@ -17,6 +17,11 @@ export const positionsApi = {
   deleteEntry: (posId, entryId) => api.delete(`/positions/${posId}/entries/${entryId}`),
   market: (id) => api.get(`/positions/${id}/market`).then((r) => r.data),
   verifyTicker: (ticker) => api.get(`/positions/verify/${ticker}`).then((r) => r.data),
+  exportCsvUrl: (id) => `http://localhost:8001/positions/${id}/export/csv`,
+  importCsv: (id, formData) =>
+    api.post(`/positions/${id}/import/csv`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data),
 };
 
 export const signalsApi = {

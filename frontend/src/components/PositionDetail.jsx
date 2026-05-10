@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { positionsApi } from "../api/client.js";
+import { ArrowLeft, Plus, Trash2, Download, Upload } from "lucide-react";
+import { positionsApi, signalsApi } from "../api/client.js";
 import PriceChart from "./PriceChart.jsx";
 import RSIChart from "./RSIChart.jsx";
+import MACDChart from "./MACDChart.jsx";
 import { calcAvgCost, fmt, fmtPct, SIGNAL_BG, cn } from "../lib/utils.js";
 
 export default function PositionDetail() {
@@ -14,6 +15,8 @@ export default function PositionDetail() {
 
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [entryForm, setEntryForm] = useState({ date: "", quantity: "", price: "" });
+  const [showMacd, setShowMacd] = useState(false);
+  const importRef = useRef(null);
 
   const { data: position, isLoading } = useQuery({
     queryKey: ["position", id],
@@ -23,6 +26,12 @@ export default function PositionDetail() {
   const { data: market } = useQuery({
     queryKey: ["market", id],
     queryFn: () => positionsApi.market(id),
+    staleTime: 60_000,
+  });
+
+  const { data: signals = [] } = useQuery({
+    queryKey: ["signals", id],
+    queryFn: () => signalsApi.list(id),
     staleTime: 60_000,
   });
 
@@ -54,6 +63,18 @@ export default function PositionDetail() {
     onSuccess: () => navigate("/"),
   });
 
+  const importCsv = useMutation({
+    mutationFn: (file) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return positionsApi.importCsv(id, fd);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["position", id] });
+      qc.invalidateQueries({ queryKey: ["positions"] });
+    },
+  });
+
   if (isLoading) return <div className="flex justify-center py-20 text-gray-500">Chargement...</div>;
   if (!position) return null;
 
@@ -62,7 +83,6 @@ export default function PositionDetail() {
   const totalQty = entries.reduce((s, e) => s + e.quantity, 0);
   const totalInvested = entries.reduce((s, e) => s + e.quantity * e.price, 0);
   const price = market?.price ?? null;
-  const signal = market ? null : null; // signal comes from live WS
   const value = price != null ? price * totalQty : null;
   const pnl = value != null ? value - totalInvested : null;
   const pnlPct = totalInvested > 0 && pnl != null ? (pnl / totalInvested) * 100 : null;
@@ -130,20 +150,64 @@ export default function PositionDetail() {
       )}
 
       <div className="grid grid-cols-1 gap-4 mb-6">
-        <PriceChart data={market?.history} />
+        <PriceChart
+          data={market?.history}
+          slPrice={slPrice}
+          tpPrice={tpPrice}
+          signals={signals}
+        />
         <RSIChart data={market?.history} />
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowMacd((v) => !v)}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+              showMacd ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+            )}
+          >
+            MACD
+          </button>
+        </div>
+        {showMacd && <MACDChart data={market?.history} />}
       </div>
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Historique DCA</h3>
-          <button
-            onClick={() => setShowAddEntry(true)}
-            className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            <Plus size={14} />
-            Ajouter
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.open(positionsApi.exportCsvUrl(id), "_blank")}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded bg-gray-800 hover:bg-gray-700"
+            >
+              <Download size={12} />
+              Export CSV
+            </button>
+            <button
+              onClick={() => importRef.current?.click()}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded bg-gray-800 hover:bg-gray-700"
+            >
+              <Upload size={12} />
+              Import CSV
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importCsv.mutate(file);
+                e.target.value = "";
+              }}
+            />
+            <button
+              onClick={() => setShowAddEntry(true)}
+              className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              <Plus size={14} />
+              Ajouter
+            </button>
+          </div>
         </div>
 
         {showAddEntry && (
@@ -258,6 +322,30 @@ export default function PositionDetail() {
               step="0.5"
               defaultValue={position.take_profit_pct}
               onBlur={(e) => updatePos.mutate({ take_profit_pct: parseFloat(e.target.value) })}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">RSI Buy (seuil survente)</label>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              max="49"
+              defaultValue={position.rsi_buy_threshold}
+              onBlur={(e) => updatePos.mutate({ rsi_buy_threshold: parseFloat(e.target.value) })}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">RSI Sell (seuil surachat)</label>
+            <input
+              type="number"
+              step="1"
+              min="51"
+              max="99"
+              defaultValue={position.rsi_sell_threshold}
+              onBlur={(e) => updatePos.mutate({ rsi_sell_threshold: parseFloat(e.target.value) })}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm"
             />
           </div>

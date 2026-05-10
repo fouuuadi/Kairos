@@ -6,16 +6,28 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
+  ReferenceDot,
   ResponsiveContainer,
 } from "recharts";
 
-export default function PriceChart({ data }) {
+export default function PriceChart({ data, slPrice, tpPrice, signals }) {
   if (!data || data.length === 0) return null;
 
   const formatted = data.map((d) => ({
     ...d,
     date: d.date?.slice(0, 10) ?? "",
   }));
+
+  // Max 10 derniers signaux BUY/SELL
+  const signalDots = (signals ?? [])
+    .filter((s) => s.signal === "BUY" || s.signal === "SELL")
+    .slice(-10)
+    .map((s) => ({
+      date: s.created_at?.slice(0, 10) ?? "",
+      price: s.price,
+      signal: s.signal,
+    }));
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -42,9 +54,38 @@ export default function PriceChart({ data }) {
             formatter={(v) => v?.toFixed(2)}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
+
+          {slPrice != null && (
+            <ReferenceLine
+              y={slPrice}
+              stroke="#ff4757"
+              strokeDasharray="4 2"
+              label={{ value: "SL", fill: "#ff4757", fontSize: 10, position: "insideTopLeft" }}
+            />
+          )}
+          {tpPrice != null && (
+            <ReferenceLine
+              y={tpPrice}
+              stroke="#00d4a1"
+              strokeDasharray="4 2"
+              label={{ value: "TP", fill: "#00d4a1", fontSize: 10, position: "insideTopLeft" }}
+            />
+          )}
+
           <Line type="monotone" dataKey="close" stroke="#60a5fa" dot={false} strokeWidth={1.5} name="Prix" />
           <Line type="monotone" dataKey="ma50" stroke="#f5a623" dot={false} strokeWidth={1} strokeDasharray="4 2" name="MA50" />
           <Line type="monotone" dataKey="ma200" stroke="#a78bfa" dot={false} strokeWidth={1} strokeDasharray="4 2" name="MA200" />
+
+          {signalDots.map((s, i) => (
+            <ReferenceDot
+              key={i}
+              x={s.date}
+              y={s.price}
+              r={5}
+              fill={s.signal === "BUY" ? "#00d4a1" : "#ff4757"}
+              stroke="none"
+            />
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

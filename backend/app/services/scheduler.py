@@ -14,7 +14,10 @@ from app.config import settings
 
 
 def is_market_hours() -> bool:
-    return True  # temporaire pour test
+    now = datetime.now(timezone.utc)
+    if now.weekday() >= 5:
+        return False
+    return 8 <= now.hour <= 21
 
 
 async def get_last_signal(db, position_id: uuid.UUID) -> Signal | None:
@@ -117,6 +120,8 @@ async def refresh_prices_loop(broadcast_fn) -> None:
                             data["price"], avg_cost,
                             pos.stop_loss_pct, pos.take_profit_pct,
                             data.get("rsi"), data.get("above_ma50"), data.get("above_ma200"),
+                            rsi_buy_threshold=pos.rsi_buy_threshold,
+                            rsi_sell_threshold=pos.rsi_sell_threshold,
                         )
 
                         changed = await save_signal_if_changed(db, pos, signal, data["price"])
