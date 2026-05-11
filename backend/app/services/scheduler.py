@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import math
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -13,11 +14,21 @@ from app.services.email import send_signal_alert
 from app.config import settings
 
 
+def clean_nan(obj):
+    """Remplace NaN/Infinity par None pour la sérialisation JSON"""
+    if isinstance(obj, dict):
+        return {k: clean_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan(v) for v in obj]
+    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
+
+
 def is_market_hours() -> bool:
     now = datetime.now(timezone.utc)
-    if now.weekday() >= 5:
-        return False
-    return 8 <= now.hour <= 21
+    # Rafraîchit 24/7 en semaine, skip weekend uniquement
+    return now.weekday() < 5
 
 
 async def get_last_signal(db, position_id: uuid.UUID) -> Signal | None:
@@ -78,31 +89,36 @@ async def notify_if_changed(
     db.add(notif)
 
     if position.email_alerts:
-        last_signals = await db.execute(
-            select(Signal)
-            .where(Signal.position_id == position.id)
-            .order_by(Signal.created_at.desc())
-            .limit(2)
-        )
-        sigs = last_signals.scalars().all()
-        old_signal = sigs[1].signal if len(sigs) >= 2 else "—"
-        send_signal_alert(
-            ticker=position.ticker,
-            old_signal=old_signal,
-            new_signal=signal,
-            price=price,
-            avg_cost=avg_cost,
-            pnl_pct=pnl_pct,
-            reason=reason,
-            currency=market_data.get("currency", "USD"),
-        )
+        try:
+            last_signals = await db.execute(
+                select(Signal)
+                .where(Signal.position_id == position.id)
+                .order_by(Signal.created_at.desc())
+                .limit(2)
+            )
+            sigs = last_signals.scalars().all()
+            old_signal = sigs[1].signal if len(sigs) >= 2 else "—"
+            send_signal_alert(
+                ticker=position.ticker,
+                old_signal=old_signal,
+                new_signal=signal,
+                price=price,
+                avg_cost=avg_cost,
+                pnl_pct=pnl_pct,
+                reason=reason,
+                currency=market_data.get("currency", "USD"),
+            )
+        except Exception as e:
+            print(f"[SCHEDULER] Email send failed: {e}")
 
 
 async def refresh_prices_loop(broadcast_fn) -> None:
     interval = settings.price_refresh_interval
+    print(f"[SCHEDULER] Started with interval={interval}s")
     while True:
         try:
             if is_market_hours():
+                print("[SCHEDULER] Market hours - refreshing prices...")
                 async with AsyncSessionLocal() as db:
                     result = await db.execute(
                         select(Position).options(selectinload(Position.entries))
@@ -150,8 +166,12 @@ async def refresh_prices_loop(broadcast_fn) -> None:
                         await asyncio.sleep(1)
 
                     if updates:
-                        await broadcast_fn({"type": "prices_update", "data": updates})
-        except Exception:
-            pass
+                        cleaned_updates = clean_nan(updates)
+                        await broadcast_fn({"type": "prices_update", "data": cleaned_updates})
+                        print(f"[SCHEDULER] Broadcasted {len(updates)} updates")
+        except Exception as e:
+            print(f"[SCHEDULER] Error: {e}")
+            import traceback
+            traceback.print_exc()
 
         await asyncio.sleep(interval)
