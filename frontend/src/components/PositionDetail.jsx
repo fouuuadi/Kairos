@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Trash2, Download, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Download, Upload, Info } from "lucide-react";
 import { positionsApi, signalsApi } from "../api/client.js";
 import PriceChart from "./PriceChart.jsx";
 import RSIChart from "./RSIChart.jsx";
 import MACDChart from "./MACDChart.jsx";
+import SignalInfoModal from "./SignalInfoModal.jsx";
 import { calcAvgCost, fmt, fmtPct, SIGNAL_BG, cn } from "../lib/utils.js";
 
 export default function PositionDetail() {
@@ -16,6 +17,7 @@ export default function PositionDetail() {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [entryForm, setEntryForm] = useState({ date: "", quantity: "", price: "" });
   const [showMacd, setShowMacd] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const importRef = useRef(null);
 
   const { data: position, isLoading } = useQuery({
@@ -106,9 +108,18 @@ export default function PositionDetail() {
           <p className="text-gray-400">{position.name}</p>
         </div>
         {currentSignal && (
-          <div className={cn("text-center px-4 py-2 rounded-xl", SIGNAL_BG[currentSignal])}>
-            <p className="text-xl font-bold">{currentSignal}</p>
-            {currentReason && <p className="text-xs mt-1 opacity-80">{currentReason}</p>}
+          <div className="flex items-start gap-2">
+            <div className={cn("text-center px-4 py-2 rounded-xl", SIGNAL_BG[currentSignal])}>
+              <p className="text-xl font-bold">{currentSignal}</p>
+              {currentReason && <p className="text-xs mt-1 opacity-80">{currentReason}</p>}
+            </div>
+            <button
+              onClick={() => setShowInfoModal(true)}
+              className="p-2 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
+              title="Comprendre ce signal"
+            >
+              <Info size={20} />
+            </button>
           </div>
         )}
       </div>
@@ -372,6 +383,14 @@ export default function PositionDetail() {
           Supprimer la position
         </button>
       </div>
+
+      {showInfoModal && (
+        <SignalInfoModal
+          signal={currentSignal}
+          reason={currentReason}
+          onClose={() => setShowInfoModal(false)}
+        />
+      )}
     </div>
   );
 }

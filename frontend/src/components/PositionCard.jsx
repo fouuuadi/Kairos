@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { calcAvgCost, fmt, fmtPct, SIGNAL_BG, cn } from "../lib/utils.js";
+import SignalInfoModal from "./SignalInfoModal.jsx";
 
 const SignalIcon = ({ signal }) => {
   if (signal === "BUY") return <TrendingUp size={14} />;
@@ -10,6 +12,7 @@ const SignalIcon = ({ signal }) => {
 
 export default function PositionCard({ position, compact = false }) {
   const navigate = useNavigate();
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const live = position.live;
   const entries = position.entries || [];
 
@@ -18,6 +21,7 @@ export default function PositionCard({ position, compact = false }) {
   const totalInvested = entries.reduce((s, e) => s + e.quantity * e.price, 0);
   const price = live?.price ?? null;
   const signal = live?.signal ?? null;
+  const reason = live?.reason ?? null;
   const value = price != null ? price * totalQty : null;
   const pnl = value != null ? value - totalInvested : null;
   const pnlPct = totalInvested > 0 && pnl != null ? (pnl / totalInvested) * 100 : null;
@@ -33,10 +37,22 @@ export default function PositionCard({ position, compact = false }) {
           {!compact && <p className="text-gray-400 text-sm">{position.name}</p>}
         </div>
         {signal && (
-          <span className={cn("flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full", SIGNAL_BG[signal])}>
-            <SignalIcon signal={signal} />
-            {signal}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={cn("flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full", SIGNAL_BG[signal])}>
+              <SignalIcon signal={signal} />
+              {signal}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowInfoModal(true);
+              }}
+              className="p-1 rounded-full hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
+              title="Comprendre ce signal"
+            >
+              <Info size={14} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -92,6 +108,14 @@ export default function PositionCard({ position, compact = false }) {
             MA200 {live.above_ma200 ? "↑" : "↓"}
           </span>
         </div>
+      )}
+
+      {showInfoModal && (
+        <SignalInfoModal
+          signal={signal}
+          reason={reason}
+          onClose={() => setShowInfoModal(false)}
+        />
       )}
     </div>
   );
